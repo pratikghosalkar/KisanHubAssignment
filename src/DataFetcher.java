@@ -1,5 +1,4 @@
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -9,10 +8,10 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -21,21 +20,14 @@ import org.jsoup.select.Elements;
 
 public class DataFetcher {
 
-	double  uk_max_temp_avg, england_max_temp_avg, scotland_max_temp_avg, wales_max_temp_avg, uk_min_temp_avg,
-			england_min_temp_avg, scotland_min_temp_avg, wales_min_temp_avg, uk_mean_temp_avg, england_mean_temp_avg,
-			scotland_mean_temp_avg, wales_mean_temp_avg, uk_rainfall_avg, england_rainfall_avg, scotland_rainfall_avg,
-			wales_rainfall_avg, uk_sunshine_avg, england_sunshine_avg, scotland_sunshine_avg, wales_sunshine_avg;
+	Map<String, Double> avgMap = new HashMap<String, Double>();
+	Map<String, ArrayList<WeatherData>> dataMap = new HashMap<String, ArrayList<WeatherData>>();
+	String maxKey = null;
+	Double max = 0.0;
 
-	ArrayList<WeatherData> uk_max_temp_list, england_max_temp_list, scotland_max_temp_list, wales_max_temp_list, uk_min_temp_list,
-	england_min_temp_list, scotland_min_temp_list, wales_min_temp_list, uk_mean_temp_list, england_mean_temp_list,
-	scotland_mean_temp_list, wales_mean_temp_list, uk_rainfall_list, england_rainfall_list, scotland_rainfall_list,
-	wales_rainfall_list, uk_sunshine_list, england_sunshine_list, scotland_sunshine_list, wales_sunshine_list;
-	
-	public void getTableData() {
+	public void getTableData() { //Parsing HTML using Jsoup library
 		Document doc;
-		System.out.println("Started");
-
-		HashMap<String, ArrayList<ArrayList<WeatherData>>> weatherMap = new HashMap<>();
+		System.out.println("Program Started\n");
 		try {
 			doc = Jsoup.connect("https://www.metoffice.gov.uk/climate/uk/summaries/datasets#yearOrdered").get();
 
@@ -47,60 +39,32 @@ public class DataFetcher {
 
 				if (cols != null && cols.size() > 0) {
 					String title = "";
-					ArrayList<ArrayList<WeatherData>> weatherDataList = new ArrayList<>();
 					for (int i = 1; i < 6; i++) {
-						// System.out.println(cols.get(i).select("a[href]").attr("href"));
 						title = cols.get(i).select("a[href]").attr("title");
 						String url = cols.get(i).select("a[href]").attr("href");
 						String arr[] = title.split(" ");
+						String region = arr[0];
+						String weather_param = arr[2];
 
-						if (arr[2].equals(Constants.WEATHER_PARAMETER[0])) {
-							ArrayList<WeatherData> tmaxList = downloadFile(url, arr[0],
-									Constants.WEATHER_PARAMETER_FOR_CSV[0]);
-							weatherDataList.add(tmaxList);
-						} else if (arr[2].equals(Constants.WEATHER_PARAMETER[1])) {
-							ArrayList<WeatherData> tminList = downloadFile(url, arr[0],
-									Constants.WEATHER_PARAMETER_FOR_CSV[1]);
-							weatherDataList.add(tminList);
-						} else if (arr[2].equals(Constants.WEATHER_PARAMETER[2])) {
-							ArrayList<WeatherData> tmeanList = downloadFile(url, arr[0],
-									Constants.WEATHER_PARAMETER_FOR_CSV[2]);
-							weatherDataList.add(tmeanList);
-						} else if (arr[2].equals(Constants.WEATHER_PARAMETER[3])) {
-							ArrayList<WeatherData> sunshineList = downloadFile(url, arr[0],
-									Constants.WEATHER_PARAMETER_FOR_CSV[3]);
-							weatherDataList.add(sunshineList);
-						} else if (arr[2].equals(Constants.WEATHER_PARAMETER[4])) {
-							ArrayList<WeatherData> rainfallList = downloadFile(url, arr[0],
-									Constants.WEATHER_PARAMETER_FOR_CSV[4]);
-							weatherDataList.add(rainfallList);
-						}
+						dataMap.put(region + "." + weather_param, downloadFile(url, region, weather_param));
 					}
-					weatherMap.put(title.split(" ")[0], weatherDataList);
 				}
 			}
 
-			writeToCSV(weatherMap);
-			
-			double max_temp=max(uk_max_temp_avg, england_max_temp_avg,scotland_max_temp_avg,wales_max_temp_avg);
-			if (max_temp==uk_max_temp_avg) {
-				WeatherData data=getFactsData(uk_max_temp_list);
-				
-				System.out.println("Averagely "+data.region_code+" has the highest value for "+data.weather_param.toLowerCase()+" among other regions. From 1910 to 2017 it was highest in "+data.key.toLowerCase()+" "+data.year +" and value was "+data.value);
-//				 System.out.println("In "+data.region_code+" region "+data.weather_param+" value in "+data.year+" is "+data.value);
-			}else if (max_temp==england_max_temp_avg) {
-				
-			}else if (max_temp==wales_max_temp_avg) {
-				
-			}else if (max_temp==scotland_max_temp_avg) {
-				
+			writeToCSV(dataMap);
+			System.out.println("----------- FACTS -----------");
+			for (int i = 0; i < Constants.WEATHER_PARAMETER.length; i++) {
+				max(avgMap, Constants.WEATHER_PARAMETER[i]);
+				WeatherData data = getFactsData(dataMap.get(maxKey));
+
+				System.out.println("Averagely " + data.region_code + " has the highest value for "
+						+ Constants.WEATHER_PARAMETER_FOR_CSV[i].toLowerCase()
+						+ " among other regions. From 1910 to 2017 it was highest in " + data.key.toLowerCase() + " "
+						+ data.year + " and value was " + data.value);
 			}
-				
-			
-			
-			System.out.println("CSV File is ready");
+			System.out.println("-----------------------------");
+			System.out.println("\nCSV File is ready. Check dowbload directory folder.");
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
@@ -129,15 +93,14 @@ public class DataFetcher {
 			}
 
 			while ((line = bufferedReader.readLine()) != null) {
-				line = line.replaceAll("\\s{5,}", " " + Constants.NA + " ").trim();
-				line = line.replaceAll("\\s+", ",");
+				line = line.replaceAll("\\s{5,}", " " + Constants.NA + " ").trim(); // If more than 5 spaces then insert N/A
+				line = line.replaceAll("\\s+", ","); //Replace all spaces with ,
 
 				String[] arr = line.split(",");
 
 				for (int i = 0, j = 1; i < Constants.MONTHS.length; i++, j++) {
 					weatherDataList.add(new WeatherData(title, weatherParam, arr[0], Constants.MONTHS[i], arr[j]));
 				}
-
 			}
 			inputStream.close();
 		} catch (MalformedURLException e1) {
@@ -147,18 +110,16 @@ public class DataFetcher {
 		return weatherDataList;
 	}
 
-	private void writeToCSV(HashMap<String, ArrayList<ArrayList<WeatherData>>> weatherMap) {
+	private void writeToCSV(Map<String, ArrayList<WeatherData>> weatherMap) {
 		File downloadDirectory = new File("download directory");
 		if (!downloadDirectory.exists()) {
 			downloadDirectory.mkdirs();
 		}
 
-		BufferedReader bufferedReader;
 		FileWriter writer = null;
 		try {
 			writer = new FileWriter(downloadDirectory + "/" + "weather_data.csv");
 		} catch (IOException e1) {
-			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
 
@@ -174,20 +135,18 @@ public class DataFetcher {
 			// Add a new line separator after the header
 			writer.append(NEW_LINE_SEPARATOR);
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 
 		for (int i = 0; i < Constants.REGION_LIST.length; i++) {
-			ArrayList<ArrayList<WeatherData>> list = weatherMap.get(Constants.REGION_LIST[i]);
-			Iterator it = list.iterator();
-			while (it.hasNext()) {
-				ArrayList<WeatherData> dataList = (ArrayList<WeatherData>) it.next();
+			for (int j = 0; j < Constants.WEATHER_PARAMETER.length; j++) {
+				ArrayList<WeatherData> dataList = weatherMap
+						.get(Constants.REGION_LIST[i] + "." + Constants.WEATHER_PARAMETER[j]);
 				try {
 					for (WeatherData weatherData : dataList) {
 						writer.append(weatherData.getRegion_code());
 						writer.append(COMMA_DELIMITER);
-						writer.append(weatherData.getWeather_param());
+						writer.append(Constants.WEATHER_PARAMETER_FOR_CSV[j]);
 						writer.append(COMMA_DELIMITER);
 						writer.append(weatherData.getYear());
 						writer.append(COMMA_DELIMITER);
@@ -197,10 +156,9 @@ public class DataFetcher {
 						writer.append(NEW_LINE_SEPARATOR);
 					}
 				} catch (IOException e) {
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
-//				getFacts(dataList);
+
 				getAverage(dataList);
 			}
 		}
@@ -208,18 +166,9 @@ public class DataFetcher {
 		try {
 			writer.close();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 
-	}
-
-	private void getFacts(ArrayList<WeatherData> dataList) {
-		WeatherData data = Collections.max(dataList);
-
-		// System.out.println("In "+data.region_code+" region
-		// "+data.weather_param+" value in "+data.year+" is "+data.value);
-		getAverage(dataList);
 	}
 
 	private void getAverage(ArrayList<WeatherData> dataList) {
@@ -228,139 +177,42 @@ public class DataFetcher {
 			if (!wd.value.equals(Constants.NA))
 				avg += Double.parseDouble(wd.value);
 		}
+		avg = avg / dataList.size();
+		avgMap.put(dataList.get(0).region_code + "." + dataList.get(0).weather_param, avg);
+		dataMap.put(dataList.get(0).region_code + "." + dataList.get(0).weather_param, dataList);
+	}
 
-//		System.out.println("Average " + dataList.get(0).weather_param + " for " + dataList.get(0).region_code
-//				+ " region is " + (avg / dataList.size()));
+	public void max(Map<String, Double> avgMap, String weather_param) {
 
-		avg=avg/dataList.size();
-		
-		switch (dataList.get(0).region_code) {
-
-		case "UK":
-			switch (dataList.get(0).weather_param) {
-			case "Max Temp":
-				uk_max_temp_avg = avg;
-				uk_max_temp_list=dataList;
-				break;
-			case "Min Temp":
-				uk_min_temp_avg=avg;
-				uk_min_temp_list=dataList;
-				break;
-			case "Mean Temp":
-				uk_mean_temp_avg=avg;
-				uk_mean_temp_list=dataList;
-				break;
-			case "Sunshine":
-				uk_sunshine_avg=avg;
-				uk_sunshine_list=dataList;
-				break;
-			case "Rainfall":
-				uk_rainfall_avg=avg;
-				uk_rainfall_list=dataList;
-				break;
+		Set<String> keySet = avgMap.keySet();
+		max = 0.0;
+		maxKey = null;
+		for (String val : keySet) {
+			if (val.contains(weather_param)) {
+				if (max < avgMap.get(val)) {
+					max = avgMap.get(val);
+					maxKey = val;
+				}
 			}
-			break;
-		case "England":
-			switch (dataList.get(0).weather_param) {
-			case "Tmax":
-				england_max_temp_avg = avg;
-				england_max_temp_list=dataList;
-				break;
-			case "Tmin":
-				england_min_temp_avg=avg;
-				england_min_temp_list=dataList;
-				break;
-			case "Tmean":
-				england_mean_temp_avg=avg;
-				england_mean_temp_list=dataList;
-				break;
-			case "Sunshine":
-				england_sunshine_avg=avg;
-				england_sunshine_list=dataList;
-				break;
-			case "Rainfall":
-				england_rainfall_avg=avg;
-				england_rainfall_list=dataList;
-				break;
-			}
-			break;
-		case "Wales":
-			switch (dataList.get(0).weather_param) {
-			case "Tmax":
-				wales_max_temp_avg = avg;
-				wales_max_temp_list=dataList;
-				break;
-			case "Tmin":
-				wales_min_temp_avg=avg;
-				wales_min_temp_list=dataList;
-				break;
-			case "Tmean":
-				wales_mean_temp_avg=avg;
-				wales_mean_temp_list=dataList;
-				break;
-			case "Sunshine":
-				wales_sunshine_avg=avg;
-				wales_sunshine_list=dataList;
-				break;
-			case "Rainfall":
-				wales_rainfall_avg=avg;
-				wales_rainfall_list=dataList;
-				break;
-			}
-			break;
-		case "Scotland":
-			switch (dataList.get(0).weather_param) {
-			case "Tmax":
-				scotland_max_temp_avg = avg;
-				scotland_max_temp_list=dataList;
-				break;
-			case "Tmin":
-				scotland_min_temp_avg=avg;
-				scotland_min_temp_list=dataList;
-				break;
-			case "Tmean":
-				scotland_mean_temp_avg=avg;
-				scotland_mean_temp_list=dataList;
-				break;
-			case "Sunshine":
-				scotland_sunshine_avg=avg;
-				scotland_sunshine_list=dataList;
-				break;
-			case "Rainfall":
-				scotland_rainfall_avg=avg;
-				scotland_rainfall_list=dataList;
-				break;
-			}
-			break;
 		}
 	}
-	
-	public static Double max(Double first, Double... rest) {
-		Double ret = first;
-	    for (Double val : rest) {
-	        ret = Math.max(ret, val);
-	    }
-	    return ret;
-	}
-	
-	private WeatherData getFactsData(ArrayList<WeatherData> dataList){
+
+	private WeatherData getFactsData(ArrayList<WeatherData> dataList) {
 		WeatherData weatherData = null;
-		Double prev=0.0;
-		
-		Iterator iterator=dataList.iterator();
+		Double prev = 0.0;
+
+		Iterator<WeatherData> iterator = dataList.iterator();
 		while (iterator.hasNext()) {
 			WeatherData object = (WeatherData) iterator.next();
-			Double curr=0.0;
+			Double curr = 0.0;
 			if (!object.value.equals(Constants.NA)) {
-				curr=Double.parseDouble(object.value);
+				curr = Double.parseDouble(object.value);
 			}
-			if (curr>0.0 && prev<curr) {
-				prev=curr;
-				weatherData=object;
+			if (curr > 0.0 && prev < curr) {
+				prev = curr;
+				weatherData = object;
 			}
-			
 		}
-		
 		return weatherData;
 	}
 }

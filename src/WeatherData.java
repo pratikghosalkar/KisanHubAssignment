@@ -1,6 +1,6 @@
 
-public class WeatherData implements Comparable<WeatherData>{
-	String region_code,weather_param,year, key, value;
+public class WeatherData implements Comparable<WeatherData> {
+	String region_code, weather_param, year, key, value;
 
 	public WeatherData(String region_code, String weather_param, String year, String key, String value) {
 		super();
@@ -53,15 +53,14 @@ public class WeatherData implements Comparable<WeatherData>{
 
 	@Override
 	public int compareTo(WeatherData o) {
-		// TODO Auto-generated method stub
-		if(!this.value.equals(Constants.NA)&& !o.value.equals(Constants.NA)){
-		Double thisValue = Double.parseDouble(this.value);
-		Double currValue = Double.parseDouble(o.value);
-				
-		return Double.compare(thisValue, currValue);}else{
+		if (!this.value.equals(Constants.NA) && !o.value.equals(Constants.NA)) {
+			Double thisValue = Double.parseDouble(this.value);
+			Double currValue = Double.parseDouble(o.value);
+
+			return Double.compare(thisValue, currValue);
+		} else {
 			return -1;
 		}
 	}
-	
-	
+
 }
